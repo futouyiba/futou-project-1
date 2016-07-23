@@ -23,6 +23,9 @@ handlers:
 - url: /play
   script: play.app
 
+- url: /sign
+  script: signup_cookie.app
+
 - url: .*
   script: main.app
 
