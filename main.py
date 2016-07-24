@@ -27,9 +27,8 @@ import hashlib
 import hmac
 from google.appengine.ext import db
 import re
-from string import letters
-import random
-import bcrypt
+import string
+from random import choice
 
 template_path = os.path.join(os.path.dirname(__file__), "template")
 jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_path), autoescape=True)
@@ -37,21 +36,22 @@ secret = "Hyperbola"
 
 
 class User(db.Model):
-    name = db.StringProperty(required=True)
+    username = db.StringProperty(required=True)
     password = db.StringProperty(required=True)
     email = db.StringProperty(required=False)
+
+
+def render_str(template, **params):
+    t = jinja_env.get_template(template)
+    return t.render(params)
 
 
 class Handler(webapp2.RequestHandler):
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
 
-    def render_str(self, template, **params):
-        t = jinja_env.get_template(template)
-        return t.render(**params)
-
     def render(self, template, **kw):
-        self.write(self.render_str(template, **kw))
+        self.write(render_str(template, **kw))
 
 
 class MainHandler(webapp2.RequestHandler):
@@ -61,22 +61,26 @@ class MainHandler(webapp2.RequestHandler):
 
 def encode_username(username):
     hmac_name = hmac.new(secret, username)
-    return '%s|%s' % (username, hmac_name)
+    return '%s|%s' % (username, hmac_name.hexdigest())
 
 
 def check_username(username_and_hmac):
     [username, hmac_name] = username_and_hmac.split('|')
-    if hmac_name == encode_username(username):
+    if username_and_hmac == encode_username(username):
         return username
 
+def gensalt():
+    return ''.join(choice(string.letters) for x in xrange(5))
 
-def encode_password(password):
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password, salt)
+def encode_password(password, *salt):
+    if not salt:
+        salt = gensalt()
+    return "%s|%s"%(salt, hashlib.sha256(password+salt).hexdigest())
 
 
 def check_password(password, hashed_password):
-    return bcrypt.checkpw(password, hashed_password)
+    salt = hashed_password.split('|')[0]
+    return encode_password(password, salt)==hashed_password
 
 
 class Welcome(Handler):
@@ -109,13 +113,21 @@ class SignupHandler(Handler):
         if verify != password:
             has_error = True
             info['verifyError'] = "Your passwords didn't match."
-        if not re.match(r'^[\S]+@[\S]+\.[\S]+$', email):
-            has_error = True
-            info['emailError'] = "That's not a valid email."
+        if email:
+            if (not re.match(r'^[\S]+@[\S]+\.[\S]+$', email)):
+                has_error = True
+                info['emailError'] = "That's not a valid email."
         if has_error:
-            self.render('signup.html', info)
+            self.render('signup.html', **info)
         else:
-            self.response.headers.add('set-cookie', 'username=%s' % encode_username(username))
+            if db.GqlQuery("select * from User where username='%s'" % username).get():
+                info['usernameError'] = "This username has been used."
+                self.render('signup.html',info)
+                return
+            user = User(username=username, password=encode_password(password), email=email)
+            print user.password
+            user.put()
+            self.response.headers.add('Set-Cookie', 'username=%s' % str(encode_username(username)))
             self.redirect('/welcome')
 
 
@@ -131,26 +143,30 @@ class SigninHandler(Handler):
             # check regex before checking if it username exist in database, because I guess it would decrease some expense in opening database.
             # But actually it is trading off from more python calculations
             # One benefit is it can prevent sQL injection.
-            dict['usernameError'] = "Please check your username, it's not valid."
-            self.render('signin.html', render_dict)
+            render_dict['usernameError'] = "Please check your username, it's not valid."
+            self.render('signin.html', **render_dict)
             return
         else:
-            password_db = db.GqlQuery("select password from User where username=%s" % username_post)
+            password_db = db.GqlQuery("select * from User where username='%s'" % username_post).get().username
             if not password_db:
-                dict['usernameError'] = "This username doesn't exit, please sign up or rewrite username."
-                self.render('signin.html', render_dict)
+                render_dict['usernameError'] = "This username doesn't exit, please sign up or rewrite username."
+                self.render('signin.html', **render_dict)
                 return
-            elif not bcrypt.checkpw(password_post, password_db):
-                dict[
+            elif not check_password(password_post, password_db):
+                render_dict[
                     'passwordError'] = "Password wrong. Forget your password? You can reset your password by emailing us."
-                self.render('signin.html', render_dict)
+                self.render('signin.html', **render_dict)
             else:
                 self.response.headers.add('username', encode_username(username_post))
                 self.redirect('/welcome')
 
 
-app = webapp2.WSGIApplication([
-    ('/', MainHandler),
-    ('/signup', SignupHandler),
-    ('/welcome', Welcome),
-], debug=True)
+class SignoutHandler(Handler):
+    def get(self):
+        self.response.headers.add("Set-Cookie", "username=None; Expires = Thu, 01-Jan-1970 00:00:00 GMT")
+        self.redirect('/signup')
+
+
+app = webapp2.WSGIApplication(
+    [('/', MainHandler), ('/signup', SignupHandler), ('/login', SigninHandler), ('/logout', SignoutHandler),
+     ('/welcome', Welcome)], debug=True)
