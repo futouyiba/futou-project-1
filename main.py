@@ -25,7 +25,7 @@ import os
 import jinja2
 import hashlib
 import hmac
-from google.appengine.ext import db
+from google.appengine.ext import ndb
 import re
 import string
 from random import choice
@@ -35,10 +35,10 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_path), au
 secret = "Hyperbola"
 
 
-class User(db.Model):
-    username = db.StringProperty(required=True)
-    password = db.StringProperty(required=True)
-    email = db.StringProperty(required=False)
+class User(ndb.Model):
+    username = ndb.StringProperty(required=True)
+    password = ndb.StringProperty(required=True)
+    email = ndb.StringProperty(required=False)
 
 
 def render_str(template, **params):
@@ -54,9 +54,17 @@ class Handler(webapp2.RequestHandler):
         self.write(render_str(template, **kw))
 
 
-class MainHandler(webapp2.RequestHandler):
+class Article(ndb.Model):
+    subject = ndb.StringProperty(required=True)
+    content = ndb.TextProperty(required=True)
+    created = ndb.DateTimeProperty(auto_now_add=True)
+
+
+class MainHandler(Handler):
     def get(self):
-        self.response.write('Hello world!')
+        articles = Article.query()
+        ten_articles = articles.fetch(10)
+        self.render("bloghome.html", articles = ten_articles )
 
 
 def encode_username(username):
@@ -69,8 +77,10 @@ def check_username(username_and_hmac):
     if username_and_hmac == encode_username(username):
         return username
 
+
 def gensalt():
     return ''.join(choice(string.letters) for x in xrange(5))
+
 
 def encode_password(password, *salt):
     if not salt:
@@ -80,7 +90,7 @@ def encode_password(password, *salt):
 
 def check_password(password, hashed_password):
     salt = hashed_password.split('|')[0]
-    return encode_password(password, salt)==hashed_password
+    return encode_password(password, salt) == hashed_password
 
 
 class Welcome(Handler):
@@ -120,7 +130,7 @@ class SignupHandler(Handler):
         if has_error:
             self.render('signup.html', **info)
         else:
-            if db.GqlQuery("select * from User where username='%s'" % username).get():
+            if ndb.GqlQuery("select * from User where username='%s'" % username).get():
                 info['usernameError'] = "This username has been used."
                 self.render('signup.html',info)
                 return
@@ -147,7 +157,7 @@ class SigninHandler(Handler):
             self.render('signin.html', **render_dict)
             return
         else:
-            password_db = db.GqlQuery("select * from User where username='%s'" % username_post).get().username
+            password_db = ndb.GqlQuery("select * from User where username='%s'" % username_post).get().username
             if not password_db:
                 render_dict['usernameError'] = "This username doesn't exit, please sign up or rewrite username."
                 self.render('signin.html', **render_dict)
