@@ -35,6 +35,10 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_path), au
 secret = "Hyperbola"
 
 
+def users_key(group='default'):
+    return ndb.Key()
+
+
 class User(ndb.Model):
     username = ndb.StringProperty(required=True)
     password = ndb.StringProperty(required=True)
@@ -44,27 +48,6 @@ class User(ndb.Model):
 def render_str(template, **params):
     t = jinja_env.get_template(template)
     return t.render(params)
-
-
-class Handler(webapp2.RequestHandler):
-    def write(self, *a, **kw):
-        self.response.out.write(*a, **kw)
-
-    def render(self, template, **kw):
-        self.write(render_str(template, **kw))
-
-
-class Article(ndb.Model):
-    subject = ndb.StringProperty(required=True)
-    content = ndb.TextProperty(required=True)
-    created = ndb.DateTimeProperty(auto_now_add=True)
-
-
-class MainHandler(Handler):
-    def get(self):
-        articles = Article.query()
-        ten_articles = articles.fetch(10)
-        self.render("bloghome.html", articles = ten_articles )
 
 
 def encode_username(username):
@@ -78,19 +61,65 @@ def check_username(username_and_hmac):
         return username
 
 
-def gensalt():
-    return ''.join(choice(string.letters) for x in xrange(5))
+def gensalt(length=5):
+    return ''.join(choice(string.letters) for x in xrange(length))
 
 
 def encode_password(password, *salt):
     if not salt:
         salt = gensalt()
-    return "%s|%s"%(salt, hashlib.sha256(password+salt).hexdigest())
+    return "%s|%s" % (salt, hashlib.sha256(password + salt).hexdigest())
 
 
-def check_password(password, hashed_password):
+def check_password(hashed_password, password):
     salt = hashed_password.split('|')[0]
     return encode_password(password, salt) == hashed_password
+
+
+class Handler(webapp2.RequestHandler):
+    def write(self, *a, **kw):
+        self.response.out.write(*a, **kw)
+
+    def render_str(self, template, **params):
+        params['user'] = self.user
+        t = jinja_env.get_template(template)
+        return t.render(params)
+
+    def render(self, template, **kw):
+        self.write(self.render_str(template, **kw))
+
+    def set_secure_cookie(self, name, val):
+        cookie_val = encode_username(val)
+        self.response.headers.add('Set-Cookie', '%s=%s; Path=/' % (name, cookie_val))
+
+    def read_secure_cookie(self, name):
+        cookie_val = self.request.cookies.get(name)
+        return cookie_val and check_username(cookie_val)
+
+    def login(self, user):
+        self.set_secure_cookie('user_id', str(user.key().id()))
+
+    def logout(self):
+        self.response.headers.add('Set-Cookie', 'user_id=; Path=/')
+
+    def initialize(self, *a, **kw):
+        webapp2.RequestHandler.initialize(self, *a, **kw)
+        uid = self.read_secure_cookie('user_id')
+        self.user = uid and User.get_by_id(int(uid))
+
+
+class Article(ndb.Model):
+    subject = ndb.StringProperty(required=True)
+    content = ndb.TextProperty(required=True)
+    created = ndb.DateTimeProperty(auto_now_add=True)
+    pic = ndb.StringProperty(required=False)
+
+
+class MainHandler(Handler):
+    def get(self):
+        articles = Article.query()
+        ten_articles = articles.fetch(10)
+        self.render("bloghome.html", articles=ten_articles)
 
 
 class Welcome(Handler):
@@ -101,6 +130,13 @@ class Welcome(Handler):
         # here we should let user see some nice pages. For a blog it should be the blog index page.
         else:
             self.redirect('/signup')
+
+
+class ArticleHandler(Handler):
+    def get(self, article_id):
+        article = Article.get_by_id(int(article_id))
+        self.render("blogpost.html", subject=article.subject, content=article.content, created=article.created
+                    , pic = article.pic)
 
 
 class SignupHandler(Handler):
@@ -132,7 +168,7 @@ class SignupHandler(Handler):
         else:
             if ndb.GqlQuery("select * from User where username='%s'" % username).get():
                 info['usernameError'] = "This username has been used."
-                self.render('signup.html',info)
+                self.render('signup.html', info)
                 return
             user = User(username=username, password=encode_password(password), email=email)
             print user.password
@@ -179,4 +215,4 @@ class SignoutHandler(Handler):
 
 app = webapp2.WSGIApplication(
     [('/', MainHandler), ('/signup', SignupHandler), ('/login', SigninHandler), ('/logout', SignoutHandler),
-     ('/welcome', Welcome)], debug=True)
+     ('/welcome', Welcome), (r'/blog/(\d+)', ArticleHandler),], debug=True)
