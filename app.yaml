@@ -9,8 +9,6 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
-
-
 - url: /css
   static_dir: css
 
@@ -19,12 +17,6 @@ handlers:
 
 - url: /js
   static_dir: js
-
-- url: /play
-  script: play.app
-
-- url: /sign
-  script: signup_cookie.app
 
 - url: .*
   script: main.app
@@ -35,3 +27,6 @@ libraries:
 
 - name: jinja2
   version: latest
+
+#- name: py-bcrypt
+#  version: latest
