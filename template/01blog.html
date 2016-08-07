@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% for post in posts %}
+    <div class="post">
+        <div class="post-subject">
+            <a href="/blog/{{post.key().id()}}">{{post.subject}}</a>
+        </div>
+
+        <pre class="post-content">
+            {{post.content}}
+        </pre>
+
+        <div class="likes">
+            {{post.liked_by_users.count("|")}} Likes
+        </div>
+
+        {% if post.author == current_user_id %}
+        <div class="post-edit-link">
+            <a href="/blog/edit/{{post.key().id()}}">Edit</a>
+            <a href="/blog/delete/{{post.key().id()}}">Delete</a>
+        </div>
+        {% elif current_user_id %}
+        <div class="post-edit-link">
+            <a href="/blog/like/{{post.key().id()}}">Like</a>
+        </div>
+        {% endif %}
+    </div>
+
+{% endfor %}
+
+{% endblock %}

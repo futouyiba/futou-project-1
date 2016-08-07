@@ -135,8 +135,7 @@ class Welcome(Handler):
 class ArticleHandler(Handler):
     def get(self, article_id):
         article = Article.get_by_id(int(article_id))
-        self.render("blogpost.html", subject=article.subject, content=article.content, created=article.created
-                    , pic = article.pic)
+        self.render("blogpost.html", article=article)
 
 
 class SignupHandler(Handler):
@@ -179,13 +178,13 @@ class SignupHandler(Handler):
 
 class SigninHandler(Handler):
     def get(self):
-        self.render('signin.html')
+        self.render('01login.html')
 
     def post(self):
         username_post = self.request.get('username')
         password_post = self.request.get('password')
         render_dict = dict(username=username_post, password=password_post)
-        if not re.match(r'', username_post):
+        if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', username_post):
             # check regex before checking if it username exist in database, because I guess it would decrease some expense in opening database.
             # But actually it is trading off from more python calculations
             # One benefit is it can prevent sQL injection.
@@ -193,14 +192,14 @@ class SigninHandler(Handler):
             self.render('signin.html', **render_dict)
             return
         else:
-            password_db = ndb.GqlQuery("select * from User where username='%s'" % username_post).get().username
+            password_db = User.query(username=username_post).get().password
             if not password_db:
                 render_dict['usernameError'] = "This username doesn't exit, please sign up or rewrite username."
                 self.render('signin.html', **render_dict)
                 return
             elif not check_password(password_post, password_db):
                 render_dict[
-                    'passwordError'] = "Password wrong. Forget your password? You can reset your password by emailing us."
+                    'passwordError'] = "Password wrong. Forget your password? You can reset your password by emailing."
                 self.render('signin.html', **render_dict)
             else:
                 self.response.headers.add('username', encode_username(username_post))
@@ -209,10 +208,10 @@ class SigninHandler(Handler):
 
 class SignoutHandler(Handler):
     def get(self):
-        self.response.headers.add("Set-Cookie", "username=None; Expires = Thu, 01-Jan-1970 00:00:00 GMT")
+        self.logout()
         self.redirect('/signup')
 
 
 app = webapp2.WSGIApplication(
     [('/', MainHandler), ('/signup', SignupHandler), ('/login', SigninHandler), ('/logout', SignoutHandler),
-     ('/welcome', Welcome), (r'/blog/(\d+)', ArticleHandler),], debug=True)
+     ('/welcome', Welcome), (r'/blog/(\d+)', ArticleHandler), ], debug=True)

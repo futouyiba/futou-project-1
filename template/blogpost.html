@@ -71,7 +71,7 @@
                 <!-- Blog Post -->
 
                 <!-- Title -->
-                <h1>{{subject}}</h1>
+                <h1>{{article.subject}}</h1>
 
                 <!-- Author -->
                 <p class="lead">
@@ -81,17 +81,17 @@
                 <hr>
 
                 <!-- Date/Time -->
-                <p><span class="glyphicon glyphicon-time"></span> Posted on August 24, 2013 at 9:00 PM</p>
+                <p><span class="glyphicon glyphicon-time"></span> Posted on {{article.created}}</p>
 
                 <hr>
 
                 <!-- Preview Image -->
-                <img class="img-responsive" src="http://placehold.it/900x300" alt="">
+                <img class="img-responsive" src="article.pic" alt="http://placehold.it/900x300">
 
                 <hr>
 
                 <!-- Post Content -->
-                <p class="lead">{{content}}</p>
+                <p class="lead">{{article.content}}</p>
 
                 <hr>
 
