@@ -36,22 +36,21 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_path), au
 secret = "Hyperbola"
 
 
-def users_key(group='default'):
-    return ndb.Key()
-
-
 class User(ndb.Model):
+    """User model. Representing a user in this blog."""
     username = ndb.StringProperty(required=True)
     password = ndb.StringProperty(required=True)
     email = ndb.StringProperty(required=False)
 
 
 def render_str(template, **params):
+    """generic method for rendering strings from a template."""
     t = jinja_env.get_template(template)
     return t.render(params)
 
 
 def encode_user_id(user_id):
+    """using a secret to encode the userID. secret is defined in this py file."""
     if user_id.isdigit():
         user_id = str(user_id)
     hmac_name = hmac.new(secret, user_id).hexdigest()
@@ -59,16 +58,19 @@ def encode_user_id(user_id):
 
 
 def check_user_id(user_id_and_hmac):
+    """When receiving a userID cookie, this function can get real user ID out of the encoded string."""
     [user_id, hmac_name] = user_id_and_hmac.split('|')
     if user_id_and_hmac == encode_user_id(user_id):
         return int(user_id)
 
 
 def gensalt(length=5):
+    """generate a salt string. If length isn't defined, then 5 is the default"""
     return ''.join(choice(string.letters) for x in xrange(length))
 
 
 def encode_password(password, salt=None):
+    """Using salt to encode the password. Returns a 'xxxxx|xxx...xxx' format string."""
     if not salt:
         salt = gensalt()
     # logging.debug("encodepassword"+str(salt))
@@ -76,12 +78,14 @@ def encode_password(password, salt=None):
 
 
 def check_password(hashed_password, password):
+    """Using encode_password function to make sure password in the post accords to the password within the datastore."""
     salt = hashed_password.split('|')[0]
     # logging.debug("checkpassword"+str(salt))
     return (encode_password(password, salt) == hashed_password)
 
 
 class Handler(webapp2.RequestHandler):
+    """The basic handler for all the entries."""
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
 
@@ -114,22 +118,9 @@ class Handler(webapp2.RequestHandler):
         uid = self.read_secure_cookie('user_id')
         self.user = uid and User.get_by_id(int(uid))
 
-    def redirect_if_article_not_owned(self, post_id):
-        article = Article.get_by_id(int(post_id))
-        if article.by != self.user.key:
-            self.redirect("/blog/%s" % post_id)
-            return True
-        return False
-
-    def redirect_if_comment_not_owned(self, post_id, comment_id):
-        comment = Comment.get_by_id(int(comment_id))
-        if comment.user_key != self.user.key:
-            self.redirect("/blog/%s" % post_id)
-            return True
-        return False
-
 
 class Article(ndb.Model):
+    """The model for a specific article within this blog."""
     subject = ndb.StringProperty(required=True)
     content = ndb.TextProperty(required=True)
     created = ndb.DateTimeProperty(auto_now_add=True)
@@ -139,12 +130,14 @@ class Article(ndb.Model):
 
 
 class Comment(ndb.Model):
+    """The model for a specific comment under a article."""
     user_key = ndb.KeyProperty(User, required=True)
     article_key = ndb.KeyProperty(Article, required=True)
     content = ndb.TextProperty(required=True)
 
 
 class MainHandler(Handler):
+    """The index page of blog. Lists all articles for reading."""
     def get(self):
         articles = Article.query().order(-Article.created)
         ten_articles = articles.fetch(10)
