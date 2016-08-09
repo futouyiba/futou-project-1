@@ -2,12 +2,12 @@
 
 <html>
     <head>
-        <link type="text/css" rel="stylesheet" href="/static/main.css" />
+        <link type="text/css" rel="stylesheet" href="/css/main.css" />
         <title>Steven's Blog</title>
     </head>
 
     <body>
-        <h1 style="background-color: #ddd;">
+        <h1 style="background-color: #0001dd; color:#ffffff">
             This is Steven Song! A game designer and a coder!
         </h1>
 
@@ -15,13 +15,13 @@
             {% if current_username %}
                 Logged in as {{current_username}}
                 <br>
-                <a href="/blog/logout">Logout</a>
-                <a href="/blog">View Posts</a>
-                <a href="/blog/newpost">New Post</a>
+                <a href="/logout">Logout</a>
+                <a href="/">View Posts</a>
+                <a href="/newpost">New Post</a>
             {% else %}
-                <a href="/blog">View Posts</a>
-                <a href="/blog/signup">Sign up</a>
-                <a href="/blog/login">Log in</a>
+                <a href="/">View Posts</a>
+                <a href="/signup">Sign up</a>
+                <a href="/login">Log in</a>
             {% endif %}
         </div>
 

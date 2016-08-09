@@ -29,6 +29,7 @@ from google.appengine.ext import ndb
 import re
 import string
 from random import choice
+import logging
 
 template_path = os.path.join(os.path.dirname(__file__), "template")
 jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_path), autoescape=True)
@@ -50,30 +51,34 @@ def render_str(template, **params):
     return t.render(params)
 
 
-def encode_username(username):
-    hmac_name = hmac.new(secret, username)
-    return '%s|%s' % (username, hmac_name.hexdigest())
+def encode_user_id(user_id):
+    if user_id.isdigit():
+        user_id = str(user_id)
+    hmac_name = hmac.new(secret, user_id).hexdigest()
+    return '%s|%s' % (user_id, hmac_name)
 
 
-def check_username(username_and_hmac):
-    [username, hmac_name] = username_and_hmac.split('|')
-    if username_and_hmac == encode_username(username):
-        return username
+def check_user_id(user_id_and_hmac):
+    [user_id, hmac_name] = user_id_and_hmac.split('|')
+    if user_id_and_hmac == encode_user_id(user_id):
+        return int(user_id)
 
 
 def gensalt(length=5):
     return ''.join(choice(string.letters) for x in xrange(length))
 
 
-def encode_password(password, *salt):
+def encode_password(password, salt=None):
     if not salt:
         salt = gensalt()
+    # logging.debug("encodepassword"+str(salt))
     return "%s|%s" % (salt, hashlib.sha256(password + salt).hexdigest())
 
 
 def check_password(hashed_password, password):
     salt = hashed_password.split('|')[0]
-    return encode_password(password, salt) == hashed_password
+    # logging.debug("checkpassword"+str(salt))
+    return (encode_password(password, salt) == hashed_password)
 
 
 class Handler(webapp2.RequestHandler):
@@ -81,7 +86,9 @@ class Handler(webapp2.RequestHandler):
         self.response.out.write(*a, **kw)
 
     def render_str(self, template, **params):
-        params['user'] = self.user
+        # params['user'] = self.user
+        if self.user:
+            params['current_username'] = self.user.username
         t = jinja_env.get_template(template)
         return t.render(params)
 
@@ -89,15 +96,15 @@ class Handler(webapp2.RequestHandler):
         self.write(self.render_str(template, **kw))
 
     def set_secure_cookie(self, name, val):
-        cookie_val = encode_username(val)
+        cookie_val = encode_user_id(val)
         self.response.headers.add('Set-Cookie', '%s=%s; Path=/' % (name, cookie_val))
 
     def read_secure_cookie(self, name):
         cookie_val = self.request.cookies.get(name)
-        return cookie_val and check_username(cookie_val)
+        return cookie_val and check_user_id(cookie_val)
 
     def login(self, user):
-        self.set_secure_cookie('user_id', str(user.key().id()))
+        self.set_secure_cookie('user_id', str(user.key.id()))
 
     def logout(self):
         self.response.headers.add('Set-Cookie', 'user_id=; Path=/')
@@ -107,27 +114,49 @@ class Handler(webapp2.RequestHandler):
         uid = self.read_secure_cookie('user_id')
         self.user = uid and User.get_by_id(int(uid))
 
+    def redirect_if_article_not_owned(self, post_id):
+        article = Article.get_by_id(int(post_id))
+        if article.by != self.user.key:
+            self.redirect("/blog/%s" % post_id)
+            return True
+        return False
+
+    def redirect_if_comment_not_owned(self, post_id, comment_id):
+        comment = Comment.get_by_id(int(comment_id))
+        if comment.user_key != self.user.key:
+            self.redirect("/blog/%s" % post_id)
+            return True
+        return False
+
 
 class Article(ndb.Model):
     subject = ndb.StringProperty(required=True)
     content = ndb.TextProperty(required=True)
     created = ndb.DateTimeProperty(auto_now_add=True)
     pic = ndb.StringProperty(required=False)
+    liked_by_users = ndb.KeyProperty(User, repeated=True)
+    by = ndb.KeyProperty(User)
+
+
+class Comment(ndb.Model):
+    user_key = ndb.KeyProperty(User, required=True)
+    article_key = ndb.KeyProperty(Article, required=True)
+    content = ndb.TextProperty(required=True)
 
 
 class MainHandler(Handler):
     def get(self):
-        articles = Article.query()
+        articles = Article.query().order(-Article.created)
         ten_articles = articles.fetch(10)
-        self.render("bloghome.html", articles=ten_articles)
+        self.render("01blog.html", posts=ten_articles)
 
 
 class Welcome(Handler):
     def get(self):
-        username = check_username(self.request.cookies.get('username'))
-        if username:
-            self.write('Welcome, %s' % username)
-        # here we should let user see some nice pages. For a blog it should be the blog index page.
+        # username = check_username(self.request.cookies.get('username'))
+        if self.user:
+            self.render("01welcome.html", username=self.user.username)
+        # here we should let user see some nice pages. For a blog it s hould be the blog index page.
         else:
             self.redirect('/signup')
 
@@ -135,12 +164,33 @@ class Welcome(Handler):
 class ArticleHandler(Handler):
     def get(self, article_id):
         article = Article.get_by_id(int(article_id))
-        self.render("blogpost.html", article=article)
+        article_key = article.key
+        comments = Comment.query(Comment.article_key == article_key).fetch()
+        self.render("01post.html", post_id=article_id, subject=article.subject, content=article.content,
+                    authorname=article.by.get().username,
+                    comments=comments)
+
+    def post(self, article_id):
+        if self.user == None:
+            self.redirect('/signup')
+            # return
+            return
+        comment_content = self.request.get("comment")
+        if comment_content:
+            comment = Comment(user_key=self.user.key, article_key=ndb.Key(Article, int(article_id)),
+                              content=comment_content)
+            # get_by_id
+            comment.put()
+            self.redirect("/blog/%s" % article_id)
+        else:
+            article = Article.get_by_id(int(article_id))
+            self.render("01post.html", subject=article.subject, content=article.content,
+                        authorname=article.by.get().username, error="Please fill comments before post!")
 
 
 class SignupHandler(Handler):
     def get(self):
-        self.render('signup.html')
+        self.render('01signup.html')
 
     def post(self):
         username = self.request.get('username')
@@ -165,20 +215,20 @@ class SignupHandler(Handler):
         if has_error:
             self.render('signup.html', **info)
         else:
-            if ndb.GqlQuery("select * from User where username='%s'" % username).get():
+            if User.query(User.username == username).get():
                 info['usernameError'] = "This username has been used."
-                self.render('signup.html', info)
+                self.render('signup.html', **info)
                 return
             user = User(username=username, password=encode_password(password), email=email)
             print user.password
-            user.put()
-            self.response.headers.add('Set-Cookie', 'username=%s' % str(encode_username(username)))
+            user_key = user.put()
+            self.login(user)
             self.redirect('/welcome')
 
 
 class SigninHandler(Handler):
     def get(self):
-        self.render('01login.html')
+        self.render('01signin.html')
 
     def post(self):
         username_post = self.request.get('username')
@@ -192,17 +242,18 @@ class SigninHandler(Handler):
             self.render('signin.html', **render_dict)
             return
         else:
-            password_db = User.query(username=username_post).get().password
+            user = User.query(User.username == username_post).get()
+            password_db = user.password
             if not password_db:
                 render_dict['usernameError'] = "This username doesn't exit, please sign up or rewrite username."
                 self.render('signin.html', **render_dict)
                 return
-            elif not check_password(password_post, password_db):
+            elif not check_password(password_db, password_post):
                 render_dict[
                     'passwordError'] = "Password wrong. Forget your password? You can reset your password by emailing."
                 self.render('signin.html', **render_dict)
             else:
-                self.response.headers.add('username', encode_username(username_post))
+                self.login(user)
                 self.redirect('/welcome')
 
 
@@ -212,6 +263,133 @@ class SignoutHandler(Handler):
         self.redirect('/signup')
 
 
+class NewArticleHandler(Handler):
+    def render_newblog(self, subject="", content="", error=""):
+        self.render("01newpost.html", subject=subject, content=content, error=error)
+
+    def get(self):
+        if self.user is None:
+            self.redirect("/signup")
+            return
+        self.render_newblog()
+
+    def post(self):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        subject = self.request.get("subject")
+        content = self.request.get("content")
+        if subject and content:
+            article = Article(by=self.user.key, subject=subject, content=content)
+            article.put()
+            article_id = article.key.id()
+            self.redirect("/blog/%s" % article_id)
+        else:
+            self.render_newblog(subject=subject, content=content, error="need both subject and content!")
+
+
+class EditArticleHandler(Handler):
+    def get(self, article_id):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        article = Article.get_by_id(int(article_id))
+        if article.by != self.user.key:
+            self.redirect("/blog/%s" % article_id)
+            return
+        self.render("01editpost.html", post_id=article_id, subject=article.subject, content=article.content)
+
+    def post(self, article_id):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        article = Article.get_by_id(int(article_id))
+        if article.by != self.user.key:
+            self.redirect("/blog/%s" % article_id)
+            return
+        subject = self.request.get("subject")
+        content = self.request.get("content")
+
+        if subject and content:
+            article.subject = subject
+            article.content = content
+            article.put()
+            self.redirect("/blog/%s" % article_id)
+        else:
+            self.render("01editpost.html", post_id=article_id, subject=subject, content=content,
+                        error="Please make sure there are subject and content!")
+
+
+class EditCommentHandler(Handler):
+    def get(self, article_id, comment_id):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        comment = Comment.get_by_id(int(comment_id))
+        if comment.user_key != self.user.key:
+            self.redirect("/blog/%s" % article_id)
+            return
+        self.render("01editcomment.html", post_id=article_id, comment_id=comment_id, content=comment.content)
+
+    def post(self, article_id, comment_id):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        comment = Comment.get_by_id(int(comment_id))
+        if comment.user_key != self.user.key:
+            self.redirect("/blog/%s" % article_id)
+            return
+        content = self.request.get("content")
+
+        if content:
+            comment.content = content
+            comment.put()
+            self.redirect("/blog/%s" % article_id)
+        else:
+            self.render("01editcomment.html", post_id=article_id, comment_id=comment_id, content=content,
+                        error="Please make sure there is content!")
+
+
+class DeleteArticleHandler(Handler):
+    def get(self, article_id):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        article = Article.get_by_id(int(article_id))
+        if article.by != self.user.key:
+            self.redirect("/blog/%s" % article_id)
+            return
+        ndb.Key(Article, int(article_id)).delete()
+
+
+class DeleteCommentHandler(Handler):
+    def get(self, article_id, comment_id):
+        if not self.user:
+            self.redirect("/signup")
+            return
+        comment = Comment.get_by_id(int(comment_id))
+        if self.user.key != comment.user_key:
+            self.redirect("/blog/%s" % article_id)
+            return
+        comment.key.delete()
+        self.redirect("/blog/%s", article_id)
+
+
+class LikeArticleHandler(Handler):
+    def get(self, article_id):
+        if not self.user:
+            self.redirect("/blog/%s" % article_id)
+            return
+        article = Article.get_by_id(int(article_id))
+        if self.user.key not in article.liked_by_users:
+            article.liked_by_users.append(self.user.key)
+            article.put()
+        self.redirect("/blog/%s" % article_id)
+
+
 app = webapp2.WSGIApplication(
     [('/', MainHandler), ('/signup', SignupHandler), ('/login', SigninHandler), ('/logout', SignoutHandler),
-     ('/welcome', Welcome), (r'/blog/(\d+)', ArticleHandler), ], debug=True)
+     ('/welcome', Welcome), (r'/blog/(\d+)', ArticleHandler), ('/blog/edit/(\d+)', EditArticleHandler),
+     ('/newpost', NewArticleHandler), ('/blog/delete/(\d+)', DeleteArticleHandler),
+     ('blog/like/(\d+)/editcomment/(\d+)', EditCommentHandler),
+     ('/blog/like/(\d+)', LikeArticleHandler), ('blog/(\d+)/deletecomment/(\d+)', DeleteCommentHandler)], debug=True)
