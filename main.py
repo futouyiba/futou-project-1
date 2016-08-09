@@ -86,6 +86,7 @@ def check_password(hashed_password, password):
 
 class Handler(webapp2.RequestHandler):
     """The basic handler for all the entries."""
+
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
 
@@ -138,6 +139,7 @@ class Comment(ndb.Model):
 
 class MainHandler(Handler):
     """The index page of blog. Lists all articles for reading."""
+
     def get(self):
         articles = Article.query().order(-Article.created)
         ten_articles = articles.fetch(10)
@@ -145,6 +147,7 @@ class MainHandler(Handler):
 
 
 class Welcome(Handler):
+    """The welcome page of blog."""
     def get(self):
         # username = check_username(self.request.cookies.get('username'))
         if self.user:
@@ -155,13 +158,15 @@ class Welcome(Handler):
 
 
 class ArticleHandler(Handler):
-    def get(self, article_id):
+    """The most complex page. In this page user can comment, like, unlike, edit or delete an article."""
+    def get(self, article_id, error=""):
         article = Article.get_by_id(int(article_id))
+        error = self.request.get("error")
         article_key = article.key
         comments = Comment.query(Comment.article_key == article_key).fetch()
         self.render("01post.html", post_id=article_id, subject=article.subject, content=article.content,
                     authorname=article.by.get().username,
-                    comments=comments)
+                    comments=comments, error=error, post=article, user_key=self.user.key)
 
     def post(self, article_id):
         if self.user == None:
@@ -182,6 +187,7 @@ class ArticleHandler(Handler):
 
 
 class SignupHandler(Handler):
+    """The signup page. Handles some regex issues."""
     def get(self):
         self.render('01signup.html')
 
@@ -220,6 +226,7 @@ class SignupHandler(Handler):
 
 
 class SigninHandler(Handler):
+    """The sign in handler mainly deals with password confirmation. Uses salt to encrypt."""
     def get(self):
         self.render('01signin.html')
 
@@ -228,7 +235,8 @@ class SigninHandler(Handler):
         password_post = self.request.get('password')
         render_dict = dict(username=username_post, password=password_post)
         if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', username_post):
-            # check regex before checking if it username exist in database, because I guess it would decrease some expense in opening database.
+            # check regex before checking if it username exist in database.
+            # Because I guess it would decrease some expense in opening database.
             # But actually it is trading off from more python calculations
             # One benefit is it can prevent sQL injection.
             render_dict['usernameError'] = "Please check your username, it's not valid."
@@ -251,12 +259,14 @@ class SigninHandler(Handler):
 
 
 class SignoutHandler(Handler):
+    """Sign out operation is simpler, redirecting to the signup page and clears the user_id cookie."""
     def get(self):
         self.logout()
         self.redirect('/signup')
 
 
 class NewArticleHandler(Handler):
+    """With new article handler user can create an article. Requires both subject and content."""
     def render_newblog(self, subject="", content="", error=""):
         self.render("01newpost.html", subject=subject, content=content, error=error)
 
@@ -282,14 +292,16 @@ class NewArticleHandler(Handler):
 
 
 class EditArticleHandler(Handler):
+    """Edit article page could be effective only if it's the same user that wrote this article."""
     def get(self, article_id):
         if not self.user:
             self.redirect("/signup")
             return
         article = Article.get_by_id(int(article_id))
         if article.by != self.user.key:
-            self.redirect("/blog/%s" % article_id)
+            self.redirect("/blog/%s?error=You can only edit your own article!" % article_id)
             return
+        # self.render("01editpost.html", post_id=article_id, subject=article.subject, content=article.content)
         self.render("01editpost.html", post_id=article_id, subject=article.subject, content=article.content)
 
     def post(self, article_id):
@@ -314,6 +326,8 @@ class EditArticleHandler(Handler):
 
 
 class EditCommentHandler(Handler):
+    """Edit comment Handler shows an 'editcomment' page if requirements are met.
+    Gives an error if no content is provided."""
     def get(self, article_id, comment_id):
         if not self.user:
             self.redirect("/signup")
@@ -344,18 +358,22 @@ class EditCommentHandler(Handler):
 
 
 class DeleteArticleHandler(Handler):
+    """If authorization right, deletes the article. If not, shows an error on the article page."""
     def get(self, article_id):
         if not self.user:
             self.redirect("/signup")
             return
         article = Article.get_by_id(int(article_id))
         if article.by != self.user.key:
-            self.redirect("/blog/%s" % article_id)
+            # self.redirect("/blog/%s" % article_id)
+            # return ArticleHandler().get(article_id=article_id, error="You can only delete your own article!")
+            self.redirect("/blog/%s?error=You can only delete your own article!" % article_id)
             return
         ndb.Key(Article, int(article_id)).delete()
 
 
 class DeleteCommentHandler(Handler):
+    """If user owns the comment, do delete. If not, shows an error on the article page."""
     def get(self, article_id, comment_id):
         if not self.user:
             self.redirect("/signup")
@@ -369,6 +387,7 @@ class DeleteCommentHandler(Handler):
 
 
 class LikeArticleHandler(Handler):
+    """Deals with like operation, and then refreshes the article page."""
     def get(self, article_id):
         if not self.user:
             self.redirect("/blog/%s" % article_id)
@@ -379,10 +398,23 @@ class LikeArticleHandler(Handler):
             article.put()
         self.redirect("/blog/%s" % article_id)
 
+class UnlikeArticleHandler(Handler):
+    """Deals with unlike operation, and then refreshes the article page."""
+    def get(self, article_id):
+        if not self.user:
+            self.redirect("/blog/%s" % article_id)
+            return
+        article = Article.get_by_id(int(article_id))
+        if self.user.key in article.liked_by_users:
+            article.liked_by_users.remove(self.user.key)
+            article.put()
+        self.redirect("/blog/%s" % article_id)
+
 
 app = webapp2.WSGIApplication(
     [('/', MainHandler), ('/signup', SignupHandler), ('/login', SigninHandler), ('/logout', SignoutHandler),
      ('/welcome', Welcome), (r'/blog/(\d+)', ArticleHandler), ('/blog/edit/(\d+)', EditArticleHandler),
      ('/newpost', NewArticleHandler), ('/blog/delete/(\d+)', DeleteArticleHandler),
      ('blog/like/(\d+)/editcomment/(\d+)', EditCommentHandler),
-     ('/blog/like/(\d+)', LikeArticleHandler), ('blog/(\d+)/deletecomment/(\d+)', DeleteCommentHandler)], debug=True)
+     ('/blog/like/(\d+)', LikeArticleHandler), ('/blog/unlike/(\d+)', UnlikeArticleHandler),
+     ('blog/(\d+)/deletecomment/(\d+)', DeleteCommentHandler)], debug=True)

@@ -13,6 +13,19 @@
     <pre class="post-content">
         {{content}}
     </pre>
+
+    <div class="comment-edit-link">
+        <a href="/blog/edit/{{post_id}}">Edit this article</a>
+        <a href="/blog/delete/{{post_id}}">Delete this article</a>
+        {% if user_key in post.liked_by_users %}
+        <a href="/blog/unlike/{{post_id}}">Unlike</a>
+        {% else %}
+        <a href="/blog/like/{{post_id}}">Like</a>
+        {% endif %}
+    </div>
+    <div class="error">
+        {{error}}
+    </div>
 </div>
 
 {% for comment in comments %}

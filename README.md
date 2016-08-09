@@ -20,14 +20,15 @@ To create an account, click the Sign up link on the top of the page. Enter a uni
 
 To log in to a previously created account, click the Log in link on the top of the page and enter your login info.
 
-2.Viewing Posts
+2.Viewing Articles
 
-To view posts, click on the View Posts link on the top of the page. To view comments on a particular post, click the post's title to go to the page for that specific post.
+To view articles, click on the View articles link on the top of the page. To view comments on a particular article, click the article's title to go to the page for that specific article.
 
-3.Creating A Post
+3.Creating An Article
 
-To create a new post, you have to be logged in. Click on the New Post link on the top of the page, and fill out the new post form. Note that every post must have a subject and post content.
+To create a new article, you have to be logged in. Click on the New Post link on the top of the page, and fill out the new article form. Note that every article must have a subject and article content.
 
-4.Viewing A Specific Post
+4.Viewing A Specific Article
 
-To view a post, click on the post's title from the main blog page. From here, you can view all comments that have been submitted for this post. If you are logged in, you can submit new comments for this post, as well as delete any comments you have previously submitted. If you are the creator of this post, you can also click the Edit or Delete links to edit or delete your post.
+To view a article, click on the article's title from the main blog page. From here, you can view all comments that have been submitted for this article. If you are logged in, you can submit new comments for this article, as well as delete any comments you have previously submitted. If you are the creator of this article, you can also click the Edit or Delete links to edit or delete your article.
+Also, you can like/unlike/edit/delete an article potentially.
