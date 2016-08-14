@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <link type="text/css" rel="stylesheet" href="/css/main.css" />
+        <title>Steven's Blog</title>
+    </head>
+
+    <body>
+        <h1 style="background-color: #0001dd; color:#ffffff">
+            This is Steven Song! A game designer and a coder!
+        </h1>
+
+        <div class="links">
+            {% if current_username %}
+                Logged in as {{current_username}}
+                <br>
+                <a href="/logout">Logout</a>
+                <a href="/">View Posts</a>
+                <a href="/newpost">New Post</a>
+            {% else %}
+                <a href="/">View Posts</a>
+                <a href="/signup">Sign up</a>
+                <a href="/login">Log in</a>
+            {% endif %}
+        </div>
+
+        {% block content %}
+        {% endblock %}
+    </body>
+</html>
