@@ -399,7 +399,7 @@ class LikeArticleHandler(Handler):
         if not self.user:
             return self.redirect("/blog/%s" % article_id)
         article = Article.get_by_id(int(article_id))
-        if self.user.key == Article.get_by_id(article_id).by:
+        if self.user.key == article.by:
             return self.redirect(
                 "/blog/%s?error=You can't like your own article!"
                 % article_id)
