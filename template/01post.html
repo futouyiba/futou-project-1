@@ -34,7 +34,7 @@
             {{comment.content}}
         </div>
 
-        {% if comment.user_id == current_user_id %}
+        {% if comment.user_key == user_key %}
             <div class="comment-edit-link">
                 <a href="/blog/{{post_id}}/editcomment/{{comment.key.id()}}">Edit</a>
                 <a href="/blog/{{post_id}}/deletecomment/{{comment.key.id()}}">Delete</a>
