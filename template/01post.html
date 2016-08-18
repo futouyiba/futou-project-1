@@ -40,7 +40,8 @@
                 <a href="/blog/{{post_id}}/deletecomment/{{comment.key.id()}}">Delete</a>
             </div>
         {% else %}
-            <div class="error">You can only edit/delete your own comment!</div>
+            <div style="color:rgba(5, 5, 5, 0.15)">You can only edit/delete your own
+                comment!</div>
         {% endif %}
     </div>
 {% endfor %}
