@@ -169,7 +169,7 @@ class ArticleHandler(Handler):
                               content=comment_content)
             # get_by_id
             comment.put()
-            self.redirect("/blog/%s" % article_id)
+            return self.redirect("/blog/%s" % article_id)
         else:
             article = Article.get_by_id(int(article_id))
             self.render("01post.html", subject=article.subject,
@@ -342,7 +342,7 @@ class EditCommentHandler(Handler):
         comment = Comment.get_by_id(int(comment_id))
         if comment.user_key != self.user.key:
             return self.redirect("/blog/%s" % article_id)
-        self.render("01editcomment.html", post_id=article_id,
+        return self.render("01editcomment.html", post_id=article_id,
                     comment_id=comment_id, content=comment.content)
 
     def post(self, article_id, comment_id):
@@ -428,12 +428,12 @@ app = webapp2.WSGIApplication(
      ('/login', SigninHandler),
      ('/logout', SignoutHandler),
      ('/welcome', Welcome),
-     (r'/blog/(\d+)', ArticleHandler),
+     ('/blog/(\d+)', ArticleHandler),
      ('/blog/edit/(\d+)', EditArticleHandler),
      ('/newpost', NewArticleHandler),
      ('/blog/delete/(\d+)', DeleteArticleHandler),
-     ('blog/(\d+)/editcomment/(\d+)', EditCommentHandler),
+     ('/blog/(\d+)/editcomment/(\d+)', EditCommentHandler),
      ('/blog/like/(\d+)', LikeArticleHandler),
      ('/blog/unlike/(\d+)', UnlikeArticleHandler),
-     ('blog/(\d+)/deletecomment/(\d+)',
+     ('/blog/(\d+)/deletecomment/(\d+)',
       DeleteCommentHandler)], debug=True)
