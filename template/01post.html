@@ -39,6 +39,8 @@
                 <a href="/blog/{{post_id}}/editcomment/{{comment.key.id()}}">Edit</a>
                 <a href="/blog/{{post_id}}/deletecomment/{{comment.key.id()}}">Delete</a>
             </div>
+        {% else %}
+            <div class="error">You can only edit/delete your own comment!</div>
         {% endif %}
     </div>
 {% endfor %}
@@ -58,6 +60,8 @@
             <input type="submit">
         </form>
     </div>
+{% else %}
+    <div class="error">You must login to comment!</div>
 {% endif %}
 
 {% endblock %}
